@@ -696,12 +696,13 @@
         isMe: true
       };
 
-      if (GAS_WEBAPP_URL && GAS_WEBAPP_URL.startsWith('https://')) {
+      const hasGas = GAS_WEBAPP_URL && GAS_WEBAPP_URL.startsWith('https://');
+      if (hasGas) {
         try {
-          const res = await fetch(GAS_WEBAPP_URL);
+          const res = await fetch(GAS_WEBAPP_URL, { redirect: 'follow' });
           if (res.ok) {
             const json = await res.json();
-            if (Array.isArray(json.leaderboard) && json.leaderboard.length > 0) {
+            if (Array.isArray(json.leaderboard)) {
               const list = json.leaderboard.map((row) => ({
                 ...row,
                 isMe: row.playerName === myEntry.playerName
@@ -710,12 +711,13 @@
             }
           }
         } catch (err) {
-          // Fallback to local benchmark
+          const combined = [myEntry, ...NPC_BENCHMARKS].sort((a, b) => b.totalXp - a.totalXp);
+          return { source: 'cloud_error', entries: combined };
         }
       }
 
       const combined = [myEntry, ...NPC_BENCHMARKS].sort((a, b) => b.totalXp - a.totalXp);
-      return { source: 'local', entries: combined };
+      return { source: hasGas ? 'cloud_error' : 'local', entries: combined };
     }
 
     // ==================== STATE & AUDIO ====================
@@ -1405,9 +1407,13 @@
       listEl.innerHTML = '<div class="text-center py-8 text-slate-400 text-sm">載入中...</div>';
 
       const { source, entries } = await loadLeaderboardData();
-      badgeEl.textContent = source === 'cloud'
-        ? '☁️ 雲端即時排行榜（同步自 Google 試算表）'
-        : '🎮 秘境目標排行榜（設定 Google 試算表後即可顯示真人排名）';
+      if (source === 'cloud') {
+        badgeEl.textContent = `☁️ 雲端即時排行榜（共 ${entries.length} 位闖關者，同步自 Google 試算表）`;
+      } else if (source === 'cloud_error') {
+        badgeEl.textContent = '⚠️ 尚未讀取到雲端排行（請確認 Apps Script 已加入 doGet 並重新部署「新版本」）';
+      } else {
+        badgeEl.textContent = '🎮 秘境目標排行榜（設定 Google 試算表後即可顯示所有真人排名）';
+      }
 
       const medals = ['🥇', '🥈', '🥉'];
       listEl.innerHTML = entries.map((item, i) => {
